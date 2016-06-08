@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en" ng-app="App">
+
+<head>
+
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <base href="/__DATABROWSER__/">
+
+  <title>__DATABROWSER__</title>
+
+  <!-- this hides ugliness before the page loads -->
+  <style type="text/css">
+    [ng\:cloak], [ng-cloak], .ng-cloak {  display: none !important; }
+  </style>
+
+  <link rel="stylesheet" type="text/css" href="http://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,600,400italic,600italic">
+
+</head>
+
+<body>
+
+  <!-- header: this is always shown even if the view changes -->
+
+  <header class="navbar navbar-default margin-large">
+    <div class="container">
+      <div class="navbar-header">
+        <h3><a class="navbar-brand" href="#">__DATABROWSER__</a></h3>
+      </div>
+      <ul class="nav navbar-nav navbar-right">
+        <li><a href="#/about">About</a></li>
+      </ul>
+    </div>
+  </header>
+
+  <!-- the view: templates will be loaded here-->
+
+  <ng-view></ng-view>
+
+  <!-- minified CSS -->
+
+  <link rel="stylesheet" href="build.min.css">
+
+  <!-- packages -->
+
+  <script src='//maps.googleapis.com/maps/api/js?libraries=geometry'></script>        <!-- google maps -->
+  <script src="bower_components/angular/angular.min.js"></script>                     <!-- angular -->
+  <script src="bower_components/angular-animate/angular-animate.js"></script>         <!-- angular animation -->
+  <script src="bower_components/angular-route/angular-route.js"></script>             <!-- angular routing -->
+  <script src="bower_components/ng-maps/dist/ng-maps.js"></script>                                 <!-- ng-data-map -->
+  <script src="bower_components/angular-sanitize/angular-sanitize.min.js"></script>   <!-- angular sanitize (for ui-select) -->
+  <script src="bower_components/angular-ui-select/dist/select.js"></script>           <!-- angular ui select -->
+  <script src="bower_components/angular-slider/slider.js"></script>                   <!-- angular slider -->
+  <script src="//angular-ui.github.io/bootstrap/ui-bootstrap-tpls-0.12.0.js"></script>
+
+  <!-- minified JS -->
+
+  <script src="build.min.js"></script>
+  
+
+</body>
+</html>

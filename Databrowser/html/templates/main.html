@@ -1,0 +1,102 @@
+
+  <!-- main container -->
+
+  <div class="container" ng-controller="Main" ng-cloak>
+
+
+
+    <!-- left column: plot controls, map -->
+
+    <div class="col-md-4">
+
+      <!-- plot controls -->
+
+      <div class="row margin-medium">
+
+        <div class="col-xs-12 col-xs-offset-1">
+          <div style="display:inline-block; min-height: 255px">
+            <datepicker ng-model="date" min-date="'1986-01-02'" max-date="'2015-01-27'" show-weeks="false" class="well well-sm"></datepicker>
+          </div>
+        </div>
+
+        <div class="col-xs-5 margin-small col-xs-offset-1">
+          <ui-select ng-model="request.yearRange" search-enabled="false" theme="bootstrap">
+            <ui-select-match>{{$select.selected.text}}</ui-select-match>
+            <ui-select-choices repeat="item.value as item in yearRange">
+              <div ng-bind-html="item.text"></div>
+            </ui-select-choices>
+          </ui-select>
+        </div>
+
+        <div class="col-xs-4 margin-small">
+          <div class="checkbox no-margin">
+            <label>
+              <input type="checkbox" ng-model="request.yRange"> Max y-lim
+            </label>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- end left column -->
+
+    </div>
+
+
+
+
+
+    <!-- right column: plots -->
+
+    <div class="col-md-7 col-md-offset-1">
+
+      <div class="row margined">
+
+        <div class="col-md-12">
+
+          <!-- loading screen-->
+
+          <div class="plot-loading" ng-show="status.loading">
+            <div class="spinner spinner-dark">
+              <div class="bounce1"></div>
+              <div class="bounce2"></div>
+              <div class="bounce3"></div>
+            </div>
+          </div>
+
+          <!-- error message -->
+
+          <div class="plot-error" ng-show="status.error">
+            <h4>Error</h4>
+            <p>{{status.error}}</p>
+          </div>
+
+          <!-- plot image -->
+
+          <img class="plot-image" ng-click="popup.visible=true" ng-hide="status.loading || status.error" ng-src="{{url && url || ''}}" />
+
+          <!-- popup directive: creates a dark transparent overlay that hides when clicked -->
+          <!-- any html can go inside -->
+
+          <popup visible="popup.visible">
+            <div class="col-sm-6 col-sm-offset-3">
+              <img class="plot-image" ng-src="{{popup.url}}" />
+            </div>
+          </popup>
+
+        </div>
+
+      </div>
+
+      <!-- end right column -->
+
+    </div>
+
+
+
+
+
+    <!-- end container -->
+ 
+  </div>
+
