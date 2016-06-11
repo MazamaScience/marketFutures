@@ -12,11 +12,18 @@
 #' contractNames <- generateContractNames('BZ', 1995, 2016)
 #' }
 
-generateContractNames <- function(commodityCode='CL',startYear=1983,endYear=2020) {
+library(lubridate)
+
+generateContractNames <- function(commodityCode='CL',startDate='1983-01-01',endDate='1995-06-06') {
+  startMonth <- as.numeric(month(startDate))
+  endMonth <- as.numeric(month(endDate))
+  
   months <- c('F', 'G', 'H', 'J', 'K', 'M', 'N', 'Q', 'U', 'V', 'X', 'Z')
-  years <- startYear:endYear
+  years <- year(startDate):year(endDate)
   allMonths <- rep(months, length(years))
   allYears <- rep(years, each=length(months))
   contracts <- paste0(commodityCode, allMonths, allYears)
+  contracts <- contracts[startMonth:(length(contracts) - (12 - endMonth))]
+  
   return(contracts)
 }
