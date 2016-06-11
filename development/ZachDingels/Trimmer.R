@@ -1,6 +1,6 @@
-load("~/Data/Quandl/CL_Settle_1990_1995.RData")
+load("~/Data/Quandl/CL_Settle_1983_2016.RData")
 
-settle <- CL_Settle_1990_1995
+settle <- CL_Settle_1983_2016
 
 trimAndSave(settle)
 
@@ -11,8 +11,31 @@ trimAndSave <- function(marketFutureDF) {
   dataToSave <- list()
   dataToSave[['date']] <- c(marketFutureDF[1,1], marketFutureDF[nrow(marketFutureDF), 1])
   
+  findBeg <- function(l) {
+    pivot <- length(l) / 2
+    if ( !is.na(l[pivot]) ) {
+      return(pivot)
+    } else {
+      return()
+    }
+  }
+  
   for ( i in 1:(ncol(marketFutureDF) - 1) ) {
     column <- marketFutureDF[,i+1]
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     index <- 1
     begNAIndex <- FALSE
     trimmedCol <- list()
@@ -30,7 +53,7 @@ trimAndSave <- function(marketFutureDF) {
   }
   
   assign('data', dataToSave)
-  save(dataToSave, file='~/Data/Quandl/test.RData')
+  save(dataToSave, file='~/Data/Quandl/again.RData')
 }
 
 loadTrimmedDF <- function(file) {
