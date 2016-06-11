@@ -11,7 +11,7 @@
 #' \dontrun{
 #' contractNames <- generateContractNames('BZ', 1995, 2016)
 #' }
-# Generatecontract namess for a commodity for a range of years
+
 generateContractNames <- function(commodityCode='CL',startYear=1983,endYear=2020) {
   months <- c('F', 'G', 'H', 'J', 'K', 'M', 'N', 'Q', 'U', 'V', 'X', 'Z')
   years <- startYear:endYear
