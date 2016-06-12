@@ -85,6 +85,8 @@ loadFutureMarketChain <- function(commodities='CL', startDate='1995-06-06', endD
   }
 }
 
+t <- loadFutureMarketChain()
+
 
 ####################################################
 # FUNCTIONS -------
