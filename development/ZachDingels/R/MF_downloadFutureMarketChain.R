@@ -19,12 +19,11 @@ library(Quandl)     # To use Quandl packages/datasets.
 library(zoo)        # To use na.locf to fill in data.
 library(lubridate)  # To use years().
 
-source('MF_generateContractNames.r', local=TRUE)
+source('~/Projects/marketFutures/development/ZachDingels/R/MF_generateContractNames.r', local=TRUE)
 
 #################################################
 # Global variables
 
-FUTURES_DATA_DIR <<- ""
 
 # TODO:  Need a global variable with getter and setter for quandlToken
 # Henry Nguyen's Quandl token
@@ -32,7 +31,8 @@ quandlToken <- "8MsMk6Rkrm3dz3U5Fr4P"
 Quandl.api_key(quandlToken)
 ##################################################
 
-loadFutureMarketChain <- function(commodities='CL', startDate='1995-06-06', endDate='1999-12-31') {
+getFutureMarketChain <- function(commodity='CL', startDate='1980-01-01', endDate='2030-12-31', 
+                                      dataDir='~/Data/Quandl') {
   
   startYear <- year(startDate)
   endYear <- year(endDate)
@@ -40,15 +40,13 @@ loadFutureMarketChain <- function(commodities='CL', startDate='1995-06-06', endD
   startMonth <- as.numeric(month(startDate))
   endMonth <- as.numeric(month(endDate))
   
-  nameSettle <- paste0(commodities, '_Settle_',startYear,'_',endYear)
-  nameVolume <- paste0(commodities, '_Volume_',startYear,'_',endYear)
-  filePathSettle <- paste0(FUTURES_DATA_DIR,'/',nameSettle,'.RData')
-  filePathVolume <- paste0(FUTURES_DATA_DIR,'/',nameVolume,'.RData')
+  filePaths <- paste0(dataDir,'/',commodity,'.RData')
   
-  RawFutureChain <- list('Date' = c(startDate, endDate))
+  RawFutureChain <- list('Commodity' = commodity, 'Date' = c(startDate, endDate), 'LastUpdate' = Sys.Date())
   
-  if (!exists(filePathSettle) && !exists(filePathVolume)) {
-    contracts <- generateContractNames(commodities, startDate, endDate)
+  if ( !file.exists(filePaths) ) {
+    print(filePaths)
+    contracts <- generateContractNames(commodity, startDate, endDate)
     
     for (contract in contracts) {
       commodityCode <- str_sub(contract,end=-6)
@@ -59,6 +57,7 @@ loadFutureMarketChain <- function(commodities='CL', startDate='1995-06-06', endD
         exchange <- 'CME'
       }  
       
+      print( paste0("Downloading", contract) )
       # Download Quandl data and handle errors
       result <- try(
         rawFutures <- Quandl(paste0(exchange, '/', contract), type='raw')[,c('Date','Settle','Volume')],
@@ -69,28 +68,23 @@ loadFutureMarketChain <- function(commodities='CL', startDate='1995-06-06', endD
         if ( str_detect(err_msg,'Requested entity does not exist')) {
           stop(paste0('The contract ', contract, ' does not exist.'), call.=FALSE)      
         }
+      } else {
+        
+        # Add data to our RawFutureChain in the correct format.
+        RawFutureChain[[contract]] <- list('DFB' = as.numeric(rawFutures$Date[1] - as.Date(startDate)), 
+                                           'Settle' = rawFutures$Settle,
+                                           'Volume' = rawFutures$Volume)
       }
       
-      # Add data to our RawFutureChain in the correct format.
-      RawFutureChain[[contract]] <- list('DFB' = as.numeric(rawFutures$Date[1] - as.Date(startDate)), 
-                                         'Settle' = rawFutures$Settle,
-                                         'Volume' = rawFutures$Volume)
-      
-      return(RawFutureChain)
     }
     
     
+    assign(commodity, RawFutureChain)
+    save(RawFutureChain, file=paste0('~/Data/Quandl/', commodity, '.RData'))
+    
+    return(RawFutureChain)
+    
   } else {
-    # Load files
+    return(get(load(paste0(dataDir, '/', commodity, '.RData'))))
   }
 }
-
-t <- loadFutureMarketChain()
-
-
-####################################################
-# FUNCTIONS -------
-#- load()
-#- getContract(contract)
-#- getDay
-####################################################

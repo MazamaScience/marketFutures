@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+from FuturesContract import FuturesContract
 
 CONTRACT_MONTH_CODES = ['F', 'G', 'H', 'J', 'K', 'M', 'N', 'Q', 'U', 'V', 'X', 'Z']
 
@@ -14,28 +15,32 @@ class Commodity(object):
 
     @property
     def pathToDataDir(self):
-        return this.pathToDataDir
+        return self._pathToDataDir
     @pathToDataDir.setter
     def pathToDataDir(self, path):
-        if os.path.isdir(path):
-            self.pathToDataDir = path
+        if os.path.exists(path):
+            self._pathToDataDir = path
             self.pathToData = os.path.join(self.pathToDataDir, self.code + '.csv')
             if not os.path.exists(self.pathToData):
-                pd.DataFrame.to_csv(self.pathToData)
+                pd.DataFrame().to_csv(self.pathToData)
         else:
-            raise FileNotFoundError('Could not find a directory with the path: %s.' % path )
+            raise OSError('Could not find a directory with the path: %s.' % path )
 
     def save(self):
+        pd.DataFrame()
+        for fc in self.contracts:
+            pass
+
         self.data.to_csv(self.pathToData)
 
     def load(self, pathToDataDir=None):
         if pathToDataDir:
-            self.pathToDataDir = pathToDataDir
+            self._pathToDataDir = pathToDataDir
 
         csvDF = pd.read_csv(self.pathToData)
 
     def update(self, startDate = None, endDate = None):
-        self.contracts = self.contracts.union(generateFutureContracts(startDate, endDate))
+        self.contracts = self.contracts.union(self.generateFutureContracts(startDate, endDate))
 
     def generateFutureContracts(self, startDate, endDate, commodityCode = None):
         if not commodityCode:
@@ -49,4 +54,7 @@ class Commodity(object):
             for contractCode in shortContractCodes:
                 fullContractCode = contractCode + year
                 futureContract = FuturesContract(fullContractCode)
-                contractCode.add(futureContract)
+                contractCodes.add(futureContract)
+
+                print futureContract
+        return contractCodes
