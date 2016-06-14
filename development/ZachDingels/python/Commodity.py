@@ -56,5 +56,4 @@ class Commodity(object):
                 futureContract = FuturesContract(fullContractCode)
                 contractCodes.add(futureContract)
 
-                print futureContract
         return contractCodes
