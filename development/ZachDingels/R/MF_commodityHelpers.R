@@ -9,6 +9,7 @@ library(dplyr)      # To use left_join() to merge data.
 library(Quandl)     # To use Quandl packages/datasets.
 library(zoo)        # To use na.locf to fill in data.
 library(lubridate)  # To use years().
+library(futile.logger)
 
 quandlToken <- "8MsMk6Rkrm3dz3U5Fr4P"
 Quandl.api_key(quandlToken)

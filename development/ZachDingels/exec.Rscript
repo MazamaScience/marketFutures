@@ -1,0 +1,13 @@
+#!/usr/bin/env rscript
+
+library(methods)
+
+option_list <- list(
+  optparse::make_option(c("-f", "--file"), default='~/test.txt', help="Path to file to save text")
+)
+
+opt <- optparse::parse_args(optparse::OptionParser(option_list=option_list))
+
+f <- file(opt$file, 'w')
+cat(as.character(Sys.time()), file=f)
+unlink(f)
