@@ -139,7 +139,7 @@ createFuturesDataframes <- function(commodityCode='CL',
   firstDate <- firstDF$Date[1]
 
   lastIndex <- max(which(!is.na(dailyDFList)))
-  lastDF <- dailyDFList[[lasIndex]]
+  lastDF <- dailyDFList[[lastIndex]]
   lastDate <- lastDF$Date[length(lastDF$Date)]
   
   # Create the full time axis
