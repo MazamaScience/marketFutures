@@ -25,7 +25,7 @@ FUTURES_DATA_DIR <<- ""
 # TODO:  Need a global variable with getter and setter for quandlToken
 # Henry Nguyen's Quandl token
 quandlToken <- "8MsMk6Rkrm3dz3U5Fr4P"
-Quandl.auth(quandlToken)
+Quandl.api_key(quandlToken)
 
 
 #################################################
@@ -127,7 +127,7 @@ createFuturesDataframes <- function(commodityCode='CL',
     )
     # In case of error, retain the 'contract' column but just insert NA
     if (class(result) == "try-error") {
-      daiilyDFList[[contract]] <- NA
+      dailyDFList[[contract]] <- NA
     }
   }
 
@@ -178,16 +178,14 @@ createFuturesDataframes <- function(commodityCode='CL',
 ###############################################################################
 ###############################################################################
 
-if (FALSE) {
+if (TRUE) {
   
   setDataDir('~/Data/Quandl')
     
-  # Create several small datasets that can be 
-  for (startYear in seq(1980,1990,5)) {
-    
-    endYear <- startYear + 5
+    startYear <- 1983
+    endYear <- 2016
     start <- paste0(startYear,'-01-01')
-    end <- paste0(startYear+4,'-12-31')
+    end <- paste0(endYear,'-12-31')
     nameSettle <- paste0('CL_Settle_',startYear,'_',endYear)
     nameVolume <- paste0('CL_Volume_',startYear,'_',endYear)
     filePathSettle <- paste0(FUTURES_DATA_DIR,'/',nameSettle,'.RData')
@@ -207,7 +205,6 @@ if (FALSE) {
       assign(nameVolume, dataList$Volume)
       save(list=nameVolume, file=filePathVolume)
       
-    }
     
   }
   
