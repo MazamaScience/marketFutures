@@ -15,5 +15,6 @@ source('~/Projects/marketFutures/development/ZachDingels/R/MF_commodityHelpers.R
 getCommodityWithContracts <- function(contracts, dataDir = '~/Data/Quandl') {
   rawFutures <- downloadRawFutures(contracts)
   commodity <- getCommodityFromRawFutures(rawFutures)
+  commodity$Meta$FilePath <- paste(dataDir, paste0(commodity$Meta$Commodity, '.RData'), sep = '/')
   return(commodity)
 }

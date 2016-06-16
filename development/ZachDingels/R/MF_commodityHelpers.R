@@ -78,7 +78,6 @@ getCommodityFromRawFutures <- function(rawFuturesList) {
   # Create the full time axis
   # NOTE:  seq.Date() exists but seq.POSIXct() does not
   allDays <- seq(as.Date(firstDate), as.Date(lastDate), by="days")
-  allDays <- as.POSIXct(allDays)
   allDaysEmptyDF <- data.frame(Date=allDays)
   
   # Create the empty dataframes that we will add columns to
@@ -90,7 +89,6 @@ getCommodityFromRawFutures <- function(rawFuturesList) {
   for (contract in contracts) {
     dailyDF <- rawFuturesList[[contract]]
     if ( is.na(rawFuturesList) ) {
-      print("yea")
       # If the dailyDF is missing, just fill with NA
       settleDF[,contract] <- NA
       volumeDF[,contract] <- NA
@@ -104,7 +102,7 @@ getCommodityFromRawFutures <- function(rawFuturesList) {
   
   commodityID <- substr(contract[1], 1, 2)
   dateRange <- c(contractToDate(contracts[1]), contractToDate(tail(contracts, 1)))
-  commodity <- list(Meta=list(Commodity=commodityID, DateRange=dateRange, LastUpdate=as.POSIXct(Sys.Date()),
+  commodity <- list(Meta=list(Commodity=commodityID, DateRange=dateRange, LastUpdate=as.POSIXct(Sys.Date())),
                     Settle=settleDF,
                     Volume=volumeDF)
   

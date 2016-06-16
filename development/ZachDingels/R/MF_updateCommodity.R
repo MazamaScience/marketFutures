@@ -15,13 +15,33 @@ source('~/Projects/marketFutures/development/ZachDingels/R/MF_getCommodityWithCo
 
 updateCommodity <- function(commodity) {
   # Get all the contracts that need to be updated
-  activeContracts <- list()
+  activeContracts <- vector()
   for (contract in names(commodity$Settle[-1])) {
     if (as.POSIXct(Sys.Date()) < contractToDate(contract)) {
       activeContracts <- append(activeContracts, contract)
     }
   }
-  # Search for new contracts
+  
+  going <- TRUE
+  date <- commodity$Meta$DateRange[2]
+  while(going) {
+    newContract <- generateContractNames(commodity$Meta$Commodity, date, date)
+    quandlCode <- generateQuandlCode(newContract)
+    result <- try(
+      Quandl(quandlCode, type='raw')[,c('Date','Settle','Volume')],
+      silent=TRUE)
+    
+    if (class(result) == 'try-error') {
+      going=FALSE
+    } else {
+      activeContracts <- c(activeContracts, newContract) 
+      day <- 01
+      month <- ifelse(month(date) == 12, 1, month(date) + 1)
+      year <- ifelse(month(date) == 1, year(date) + 1, year(date))
+      date <- as.POSIXct( paste(year, month, day, sep = '-') )
+    }
+    
+  }
   ###### TODO ####
   if (length(activeContracts) == 0) {
     return(commodity)
@@ -31,11 +51,13 @@ updateCommodity <- function(commodity) {
   
   # Replace the old data with the updated data
   for (contract in activeContracts) {
+    print(contract)
     commodity$Settle[[contract]] <- updatedCommodity$Settle[[contract]]
     commodity$Volume[[contract]] <- updatedCommodity$Volume[[contract]]
   }
   
   commodity$Meta$lastUpdate <- Sys.Date()
+  saveCommodity(commodity)
   return(commodity)
   
 }

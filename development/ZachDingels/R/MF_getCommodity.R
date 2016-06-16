@@ -38,11 +38,8 @@ getCommodity <- function(commodityID, startDate='1980-01-01', endDate='2030-12-3
     rawFutures <- downloadRawFutures(contracts)
     commodity <- getCommodityFromRawFutures(rawFutures)
     
-    print(paste0("Saving data to ", filePath))
-    
-    assign(commodityID, commodity)
-    save(commodity, file=filePath)
-    
+    commodity$Meta[['FilePath']] <- filePath
+    saveCommodity(commodity)
     return(commodity)
     
   } else {
