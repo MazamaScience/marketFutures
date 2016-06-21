@@ -12,6 +12,7 @@
 
 source('~/Projects/marketFutures/development/ZachDingels/R/MF_commodityHelpers.R', local=TRUE)
 source('~/Projects/marketFutures/development/ZachDingels/R/MF_getCommodityWithContracts.R', local=TRUE)
+source('~/Projects/marketFutures/development/ZachDingels/R/MF_saveCommodity.R', local=TRUE)
 
 updateCommodity <- function(commodity) {
   # Get all the contracts that need to be updated
@@ -47,11 +48,21 @@ updateCommodity <- function(commodity) {
     return(commodity)
   }
   
-  updatedCommodity <- getCommodityWithContracts(activeContracts)
+  uniqueActiveContracts <- unique(activeContracts)
+  updatedCommodity <- getCommodityWithContracts(uniqueActiveContracts)
+  
+  # The new DF is going to have rows that we don't have because it has additional days
+  # So we need to add new rows
+  numAdditionalDays <-  sum(!(rownames(updatedCommodity$Settle) %in% rownames(commodity$Settle)))
+  for (i in 1:numAdditionalDays) {
+    commodity$Settle <- rbind(commodity$Settle, NA)
+    commodity$Volume <- rbind(commodity$Volume, NA)
+  }
+  
   
   # Replace the old data with the updated data
-  for (contract in activeContracts) {
-    print(contract)
+  # Also update the new dates.
+  for (contract in c(uniqueActiveContracts, 'Date')) {
     commodity$Settle[[contract]] <- updatedCommodity$Settle[[contract]]
     commodity$Volume[[contract]] <- updatedCommodity$Volume[[contract]]
   }
