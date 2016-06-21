@@ -1,0 +1,365 @@
+#!/usr/bin/env rscript
+
+suppressPackageStartupMessages({ suppressWarnings( {
+library(methods, quietly = TRUE)
+library(stringr, quietly = TRUE)    # For string handling functions
+library(dplyr, quietly = TRUE)      # To use left_join() to merge data.
+
+library(Quandl, quietly = TRUE)     # To use Quandl packages/datasets.
+library(zoo, quietly = TRUE)        # To use na.locf to fill in data.
+library(lubridate, quietly = TRUE)  # To use years().
+library(futile.logger, quietly = TRUE)
+library(optparse, quietly = TRUE)
+})
+})
+
+################################################################################
+################################################################################
+############################# Helper Functions #################################
+################################################################################
+
+# This function will create all the contracts for a given commodity within a
+# given range of days
+generateContractNames <- function(commodityCode='CL',startDate='1983-01-01',
+                                  endDate='1995-06-06') {
+  startMonth <- as.numeric(month(startDate))
+  endMonth <- as.numeric(month(endDate))
+  
+  years <- year(startDate):year(endDate)
+  allMonths <- rep(CONTRACT_MONTHS, length(years))
+  allYears <- rep(years, each=length(CONTRACT_MONTHS))
+  contracts <- paste0(commodityCode, allMonths, allYears)
+  contracts <- contracts[startMonth:(length(contracts) - (12 - endMonth))]
+  
+  return(contracts)
+}
+
+# This function will generate a list of query codes that you can pass to Quandl
+# to get actual data.
+generateQuandlCode <- function(contract) {
+  commodityCode <- str_sub(contract,end=-6)
+  # On Quandl, every commodity is from the CME exchange except cocoa, coffee,
+  # cotton, orange juice, and sugar #11.
+  if (commodityCode %in% c('CC','KC','CT','OJ','SB')) {
+    exchange <- 'ICE'
+  } else {
+    exchange <- 'CME'
+  }  
+  quandlCode <- paste0(exchange, '/', contract)
+  return(quandlCode)
+}
+
+# This function downloads raw data from quandl for a list of contracts. This
+# function returns a dataframe
+downloadRawFutures <- function(contracts) {
+  rawFuturesList <- list()
+  for (contract in contracts) {
+    quandlCode <- generateQuandlCode(contract)
+    
+    futile.logger::flog.info(paste0("Downloading ", contract))
+    result <- try(
+      rawFutures <- Quandl(quandlCode, type='raw')[,c('Date','Settle','Volume')],
+      silent=TRUE)
+    
+    if (class(result) == 'try-error') {
+      err_msg <- geterrmessage()
+      if ( str_detect(err_msg,'Requested entity does not exist') ) {
+        futile.logger::flog.warn(paste0('The contract ', contract, 
+                                        ' does not exist.'))  
+      } else if ( str_detect(err_msg,'incorrect Quandl code') ) {
+        futile.logger::flog.warn(
+          paste0('Incorrect quandl code for the contract ', contract,
+                 '. Contract may not exists.'))  
+      }
+      futile.logger::flog.info(paste0('Failed to download ', contract, 
+                                      ' with error: ', err_msg))
+      
+    } else {
+      futile.logger::flog.info(paste0("Sucessfully downloaded ", contract))
+      rawFuturesList[[contract]] <- rawFutures
+    }
+  }
+  return(rawFuturesList)
+}
+
+# This function turns raw quandl data into a commodity object. The difference
+# between a raw quandl dataframe and commodity is that the commodity also
+# contains meta data.
+getCommodityFromRawFutures <- function(rawFuturesList, commodityID) {
+  # ----- Step 2:  Create a shared time axis
+  
+  # Get the date range from the downloaded contracts
+  dates <- list()
+  for (DF in rawFuturesList) {
+    dates <- append(dates, DF$Date)
+  }
+  firstDate <- min(dates)
+  lastDate <- max(dates)
+  
+  # Create the full time axis
+  # NOTE:  seq.Date() exists but seq.POSIXct() does not
+  allDays <- seq(as.Date(firstDate), as.Date(lastDate), by="days")
+  allDaysEmptyDF <- data.frame(Date=allDays)
+  
+  # Create the empty dataframes that we will add columns to
+  settleDF <- data.frame(Date=allDays)
+  volumeDF <- data.frame(Date=allDays)
+  
+  # ----- Step 3:  Put all these daily contracts on the shared time axis
+  contracts <- names(rawFuturesList)
+  for (contract in contracts) {
+    dailyDF <- rawFuturesList[[contract]]
+    if ( is.na(rawFuturesList) ) {
+      # If the dailyDF is missing, just fill with NA
+      settleDF[,contract] <- NA
+      volumeDF[,contract] <- NA
+    } else {
+      # Merge daily contract onto the allDays axis and add the contract column
+      allDaysDF <- dplyr::left_join(allDaysEmptyDF, dailyDF, by='Date')
+      settleDF[,contract] <- allDaysDF['Settle']
+      volumeDF[,contract] <- allDaysDF['Volume']      
+    }
+  }
+  
+  dateRange <- c(contractToDate(contracts[1]), 
+                 contractToDate(tail(contracts, 1)))
+  commodity <- list(Meta=list(Commodity=commodityID, DateRange=dateRange,
+                              LastUpdate=as.POSIXct(Sys.Date())),
+                    Settle=settleDF,
+                    Volume=volumeDF)
+  
+  return( structure(commodity, class = c('Commodity', 'list')) )
+}
+
+# Returns the date that a contract is associated with.
+contractToDate <- function(contract) {
+  day <- '01'
+  contractMonthCode <- substr(contract, 
+                              str_length(contract)-4, str_length(contract)-4)
+  month <- as.character(which(CONTRACT_MONTHS %in% contractMonthCode))
+  year <- substr(contract, str_length(contract) - 3, str_length(contract))
+  return( as.POSIXct(paste(year, month, day, sep = '-')) )
+}
+
+
+################################################################################
+################################################################################
+########################## Top Level Functions #################################
+################################################################################
+
+# Get's a commodity given a commodity ID, start and end dates and a path to a
+# data directory. There is also an option not return anything if you just want
+# to download and save data.
+getCommodity <- function(commodityID, 
+                         startDate='1980-01-01', endDate='2030-12-31', 
+                         dataDir='~/Data/Quandl', returnEmpty = FALSE) {
+  
+  startYear <- year(startDate)
+  endYear <- year(endDate)
+  
+  if (substr(dataDir, nchar(dataDir), nchar(dataDir)) == '/') {
+    dataDir <- substr(dataDir, 1, nchar(dataDir) - 1)
+  }
+  
+  filePath <- paste0(dataDir,'/',commodityID,'.RData')
+  
+  
+  if ( !file.exists(filePath) ) {
+    
+    contracts <- generateContractNames(commodityID, startDate, endDate)
+    rawFutures <- downloadRawFutures(contracts)
+    commodity <- getCommodityFromRawFutures(rawFutures, commodityID)
+    
+    commodity$Meta[['FilePath']] <- filePath
+    saveCommodity(commodity)
+    
+  } else {
+    commodity <- get(load(paste0(dataDir, '/', commodityID, '.RData')))
+  }
+  if (!returnEmpty) {
+    return(commodity)
+  }
+}
+
+# Given a list of commodites, a start and end date and a path to a data
+# directory this function returns a list of commodities.
+getCommodities <- function(commodityIDs, 
+                           startDate='1980-01-01', endDate='2030-12-31', 
+                           dataDir='~/Data/Quandl', returnEmpty = FALSE) {
+  commodities <- list()
+  for (commodityID in commodityIDs) {
+    commodity <- getCommodity(commodityID, startDate, endDate, dataDir, returnEmpty)
+    commodities[[commodityID]] <- commodity
+    setTxtProgressBar(progressBar, getTxtProgressBar(progressBar) + 1)
+  }
+  return(commodities)
+}
+
+# If you know which contracts you want you can use this function to create a
+# commodity.
+getCommodityWithContracts <- function(contracts, commodityID, 
+                                      dataDir = '~/Data/Quandl') {
+  rawFutures <- downloadRawFutures(contracts)
+  commodity <- getCommodityFromRawFutures(rawFutures, commodityID)
+  commodity$Meta$FilePath <- 
+    paste(dataDir, paste0(commodity$Meta$Commodity, '.RData'), sep = '/')
+  return(commodity)
+}
+
+# This function updates a commodity with the most current data. 
+updateCommodity <- function(commodity) {
+  if (Sys.Date() == as.Date(commodity$Meta$LastUpdate)) {
+    return(commodity)
+  }
+  futile.logger::flog.info(paste0('Updating ', commodity$Meta$Commodity, '.'))
+  
+  # Get all the contracts that need to be updated
+  activeContracts <- vector()
+  for (contract in names(commodity$Settle[-1])) {
+    if (as.POSIXct(Sys.Date()) < contractToDate(contract)) {
+      activeContracts <- append(activeContracts, contract)
+    }
+  }
+  
+  going <- TRUE
+  date <- commodity$Meta$DateRange[2]
+  while(going) {
+    newContract <- generateContractNames(commodity$Meta$Commodity, date, date)
+    quandlCode <- generateQuandlCode(newContract)
+    result <- try(
+      Quandl(quandlCode, type='raw')[,c('Date','Settle','Volume')],
+      silent=TRUE)
+    
+    if (class(result) == 'try-error') {
+      going=FALSE
+    } else {
+      activeContracts <- c(activeContracts, newContract) 
+      day <- 01
+      month <- ifelse(month(date) == 12, 1, month(date) + 1)
+      year <- ifelse(month(date) == 1, year(date) + 1, year(date))
+      date <- as.POSIXct( paste(year, month, day, sep = '-') )
+    }
+    
+  }
+  if (length(activeContracts) == 0) {
+    return(commodity)
+  }
+  
+  uniqueActiveContracts <- unique(activeContracts)
+  updatedCommodity <- getCommodityWithContracts(
+                        uniqueActiveContracts, commodity$Meta$Commodity)
+  
+  # The new DF is going to have rows that we don't have because it has
+  # additional days So we need to add new rows
+  numAdditionalDays <-  
+    sum(!(rownames(updatedCommodity$Settle) %in% rownames(commodity$Settle)))
+  for (i in 1:numAdditionalDays) {
+    commodity$Settle <- rbind(commodity$Settle, NA)
+    commodity$Volume <- rbind(commodity$Volume, NA)
+  }
+  
+  
+  # Replace the old data with the updated data
+  # Also update the new dates.
+  for (contract in c(uniqueActiveContracts, 'Date')) {
+    commodity$Settle[[contract]] <- updatedCommodity$Settle[[contract]]
+    commodity$Volume[[contract]] <- updatedCommodity$Volume[[contract]]
+  }
+  
+  commodity$Meta$lastUpdate <- Sys.Date()
+  saveCommodity(commodity)
+  return(commodity)
+  
+}
+
+# Save a given commodity. 
+saveCommodity <- function(commodity) {
+  logMsg <- paste0("Saving Commodity: ", commodity$Meta$Commodity, " to ", 
+                   commodity$Meta$FilePath)
+  futile.logger::flog.info(logMsg)
+  assign(commodity$Meta$Commodity, commodity)
+  save(commodity, file=commodity$Meta$FilePath)
+}
+
+commoditiesInDir <- function(dataDir='~/Data/Quandl') {
+  directoryContents <- system(paste0('ls ', dataDir), intern = TRUE)
+  commodityFiles <- directoryContents[str_detect(directoryContents, '.RData')]
+  commodities <- str_extract(commodityFiles, '^[^.]*')
+  return(commodities)
+}
+
+################################################################################
+################################################################################
+########################### Main Program #######################################
+################################################################################
+
+
+quandlToken <- "8MsMk6Rkrm3dz3U5Fr4P"
+Quandl.api_key(quandlToken)
+
+CONTRACT_MONTHS <<- c('F', 'G', 'H', 'J', 'K', 'M', 'N', 'Q', 'U', 'V', 'X', 'Z')
+
+
+# Defaults
+dataDir <- file.path(Sys.getenv()[['HOME']], 'Data/Quandl/')
+defaultCommodities <- 
+  c('CL', 'RB', 'HO', 'NG', #Crude Oil-Gasoline-Heating Oil-Natural Gas
+    'GC', 'SI', 'HG', 'PA', 'PL', #Gold-Silver-Copper-Palladium-Platinum
+    'C', 'O', 'RR', 'SM', 'BO', 'S', 'W', # Corn-Oats-Rough Rice-Soybean Meal- 
+                                          # Soybean Oil-Soy Bean-Wheat
+    'FC', 'PB', 'LC', #Feeder Cattle-Pork Bellies-Live Cattle
+    'CC', 'KC', 'TT', 'LB', 'OJ', 'SB' #Cocoa-Coffee-Cotton-Lumber-Orange Juice-
+                                       # Sugar
+                        )
+defaultStartDate <- '1980-01-01'
+defaultEndDate <- '2024-12-31'
+defaultLogLevel <- 'INFO'
+defaultLogPath <- file.path(Sys.getenv()[['HOME']], 'Data/Quandl/TRANSCRIPT.txt')
+
+# Set up OptionParser
+option_list <- list(
+  optparse::make_option(c("--dataDir"), default=dataDir, help="Directory to store data in [default \"%default\"]"),
+  optparse::make_option(c("-i", "--install"), action = 'store_true', default=FALSE, help="Flag to install data. Use this is this is your first time running this script [default \"%default\"]"),
+  optparse::make_option(c("-c", "--commodities"), default=defaultCommodities, help=" A list of commodities to install. Commodities should be in CAPS and comma seperated. [default \"%default\"]"),
+  optparse::make_option(c("-u", "--update"), action = 'store_true', default=FALSE, help="Flag to update data. Use this flag for cron jobs. [default \"%default\"]"),
+  optparse::make_option(c("--startdate"), default=defaultStartDate, help="Date to begin instillation from. [default \"%default\"]"),
+  optparse::make_option(c("--enddate"), default=defaultEndDate, help="Date to end instillation at. [default \"%default\"]"),
+  optparse::make_option(c("-l", "--loglevel"), default=defaultLogLevel, help="Lowest level to log at. [default \"%default\"]"),
+  optparse::make_option(c("-p", "--logpath"), default=defaultLogPath, help="Path to the log. [default \"%default\"]")
+  
+)
+# Parse arguments
+opt <- optparse::parse_args(optparse::OptionParser(option_list=option_list))
+# Parse commodities
+if (length(opt$commodities) == 1) {
+  opt$commodities <- unlist(str_split(opt$commodities, ','))
+}
+
+# Set up logger, use dummy variable to silence
+if ( file.exists(opt$logpath) ) {
+  file.remove(opt$logpath)
+}
+boo <- futile.logger::flog.appender(futile.logger::appender.file(opt$logpath))
+# Set log level
+boo <- futile.logger::flog.threshold(opt$loglevel)
+# Silence other warning messages
+options(warn=-1)
+
+progressBar <<- txtProgressBar(max = length(opt$commodities), style = 3)
+
+if (opt$install) {
+  futile.logger::flog.info('Beginning install.')
+  getCommodities(opt$commodities, opt$startdate, opt$enddate, opt$dataDir, returnEmpty=TRUE)
+  futile.logger::flog.info('Instillation complete.')
+}
+
+if (opt$update) {
+  futile.logger::flog.info('Beginning update.')
+  downloadedCommodities <- commoditiesInDir(opt$dataDir)
+  for (commodity in downloadedCommodities) {
+    com <- getCommodity(commodity, dataDir = opt$dataDir)
+    saveCommodity(updateCommodity(com))
+    setTxtProgressBar(progressBar, getTxtProgressBar(progressBar) + 1)
+  }
+  futile.logger::flog.info('Update complete.')
+}
