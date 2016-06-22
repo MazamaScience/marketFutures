@@ -71,8 +71,8 @@ downloadRawFutures <- function(contracts) {
           paste0('Incorrect quandl code for the contract ', contract,
                  '. Contract may not exists.'))  
       }
-      futile.logger::flog.info(paste0('Failed to download ', contract, 
-                                      ' with error: ', err_msg))
+      
+      futile.logger::flog.error(paste0('Failed to download ', contract, '. ', err_msg))
       
     } else {
       futile.logger::flog.info(paste0("Sucessfully downloaded ", contract))
@@ -208,12 +208,13 @@ getCommodityWithContracts <- function(contracts, commodityID,
 
 # This function updates a commodity with the most current data. 
 updateCommodity <- function(commodity) {
+  futile.logger::flog.info(paste0('Updating ', commodity$Meta$Commodity, '.'))
   if (Sys.Date() == as.Date(commodity$Meta$LastUpdate)) {
+    futile.logger::flog.info(paste0(commodity$Meta$Commodity, 'is already up to date.'))
     return(commodity)
   }
-  futile.logger::flog.info(paste0('Updating ', commodity$Meta$Commodity, '.'))
   
-  # Get all the contracts that need to be updated
+  # Get all the contracts we already have that need to be updated
   activeContracts <- vector()
   for (contract in names(commodity$Settle[-1])) {
     if (as.POSIXct(Sys.Date()) < contractToDate(contract)) {
@@ -221,38 +222,51 @@ updateCommodity <- function(commodity) {
     }
   }
   
+  # Get all the new contracts to add
   going <- TRUE
   date <- commodity$Meta$DateRange[2]
+  cnt <- 1
+  threshold <- 3
   while(going) {
     newContract <- generateContractNames(commodity$Meta$Commodity, date, date)
     quandlCode <- generateQuandlCode(newContract)
     result <- try(
       Quandl(quandlCode, type='raw')[,c('Date','Settle','Volume')],
       silent=TRUE)
-    
+    day <- 01
+    month <- ifelse(month(date) == 12, 1, month(date) + 1)
+    year <- ifelse(month(date) == 1, year(date) + 1, year(date))
+    date <- as.POSIXct( paste(year, month, day, sep = '-') )
+    print (result)
     if (class(result) == 'try-error') {
-      going=FALSE
+      cnt <- cnt + 1
+      # Some commodities (OJ) go every other month so this way if we don't get a
+      # commodity for a quarter then we will stop looking
+      if (cnt > threshold) {
+        going <- FALSE
+      }
+      next
     } else {
-      activeContracts <- c(activeContracts, newContract) 
-      day <- 01
-      month <- ifelse(month(date) == 12, 1, month(date) + 1)
-      year <- ifelse(month(date) == 1, year(date) + 1, year(date))
-      date <- as.POSIXct( paste(year, month, day, sep = '-') )
+      cnt <- 1
+      activeContracts <- c(activeContracts, newContract)
     }
-    
   }
+  
   if (length(activeContracts) == 0) {
     return(commodity)
   }
+  futile.logger::flog.info(paste0('Updating ', length(activeContracts), ' contracts for ', commodity$Meta$Commodity))
   
-  uniqueActiveContracts <- unique(activeContracts)
+  activeContracts <- unique(activeContracts)
   updatedCommodity <- getCommodityWithContracts(
-                        uniqueActiveContracts, commodity$Meta$Commodity)
+                        activeContracts, commodity$Meta$Commodity)
+  # THIS IS NOT THE LAST CONTRACT!!!! The contracts need to be sorted! TODO!
+  updatedCommodity$Meta$DateRange[2] <- contractToDate(tail(activeContracts, 1))
   
   # The new DF is going to have rows that we don't have because it has
   # additional days So we need to add new rows
   numAdditionalDays <-  
-    sum(!(rownames(updatedCommodity$Settle) %in% rownames(commodity$Settle)))
+    sum(!(updatedCommodity$Settle$Date %in% commodity$Settle$Date))
   for (i in 1:numAdditionalDays) {
     commodity$Settle <- rbind(commodity$Settle, NA)
     commodity$Volume <- rbind(commodity$Volume, NA)
@@ -261,12 +275,13 @@ updateCommodity <- function(commodity) {
   
   # Replace the old data with the updated data
   # Also update the new dates.
-  for (contract in c(uniqueActiveContracts, 'Date')) {
+  for (contract in c(activeContracts, 'Date')) {
     commodity$Settle[[contract]] <- updatedCommodity$Settle[[contract]]
     commodity$Volume[[contract]] <- updatedCommodity$Volume[[contract]]
   }
   
-  commodity$Meta$lastUpdate <- Sys.Date()
+  commodity$Meta$LastUpdate <- Sys.Date()
+  futile.logger::flog.info(paste0('Sucessfully updated ', commodity$Meta$Commodity, '.'))
   saveCommodity(commodity)
   return(commodity)
   
@@ -350,7 +365,7 @@ progressBar <<- txtProgressBar(max = length(opt$commodities), style = 3)
 if (opt$install) {
   futile.logger::flog.info('Beginning install.')
   getCommodities(opt$commodities, opt$startdate, opt$enddate, opt$dataDir, returnEmpty=TRUE)
-  futile.logger::flog.info('Instillation complete.')
+  futile.logger::flog.info('Installation complete.')
 }
 
 if (opt$update) {
