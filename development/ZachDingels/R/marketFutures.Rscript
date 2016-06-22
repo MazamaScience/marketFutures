@@ -54,29 +54,37 @@ generateQuandlCode <- function(contract) {
 downloadRawFutures <- function(contracts) {
   rawFuturesList <- list()
   for (contract in contracts) {
-    quandlCode <- generateQuandlCode(contract)
-    
     futile.logger::flog.info(paste0("Downloading ", contract))
-    result <- try(
-      rawFutures <- Quandl(quandlCode, type='raw')[,c('Date','Settle','Volume')],
-      silent=TRUE)
     
-    if (class(result) == 'try-error') {
-      err_msg <- geterrmessage()
-      if ( str_detect(err_msg,'Requested entity does not exist') ) {
-        futile.logger::flog.warn(paste0('The contract ', contract, 
-                                        ' does not exist.'))  
-      } else if ( str_detect(err_msg,'incorrect Quandl code') ) {
-        futile.logger::flog.warn(
-          paste0('Incorrect quandl code for the contract ', contract,
-                 '. Contract may not exists.'))  
+    quandlCode <- generateQuandlCode(contract)
+    going <- TRUE
+    while (going) {
+      result <- try(
+        rawFutures <- Quandl(quandlCode, type='raw')[,c('Date','Settle','Volume')],
+        silent=TRUE)
+      
+      if (class(result) == 'try-error') {
+        err_msg <- geterrmessage()
+        if ( str_detect(err_msg,'Requested entity does not exist') ) {
+          futile.logger::flog.warn(paste0('The contract ', contract, 
+                                          ' does not exist.'))  
+        } else if ( str_detect(err_msg,'incorrect Quandl code') ) {
+          futile.logger::flog.warn(
+            paste0('Incorrect quandl code for the contract ', contract,
+                   '. Contract may not exists.'))  
+        } else if ( str_detect(err_msg,'exceeded the API speed limit') ) {
+          futile.logger::flog.warn(
+            paste0('Reached Quandls query limit. Waiting for the limit to reset.'))
+          Sys.sleep(60 * 10)
+        }
+        
+        futile.logger::flog.error(paste0('Failed to download ', contract, '. ', err_msg))
+        
+      } else {
+        futile.logger::flog.info(paste0("Sucessfully downloaded ", contract))
+        going <- FALSE
+        rawFuturesList[[contract]] <- rawFutures
       }
-      
-      futile.logger::flog.error(paste0('Failed to download ', contract, '. ', err_msg))
-      
-    } else {
-      futile.logger::flog.info(paste0("Sucessfully downloaded ", contract))
-      rawFuturesList[[contract]] <- rawFutures
     }
   }
   return(rawFuturesList)
@@ -86,6 +94,9 @@ downloadRawFutures <- function(contracts) {
 # between a raw quandl dataframe and commodity is that the commodity also
 # contains meta data.
 getCommodityFromRawFutures <- function(rawFuturesList, commodityID) {
+  if (length(rawFuturesList) == 0) {
+    futile.logger::flog.fatal(paste0('No data from quandl was found for ', commodityID, '.'))
+  }
   # ----- Step 2:  Create a shared time axis
   
   # Get the date range from the downloaded contracts
@@ -310,7 +321,7 @@ commoditiesInDir <- function(dataDir='~/Data/Quandl') {
 
 
 quandlToken <- "8MsMk6Rkrm3dz3U5Fr4P"
-Quandl.api_key(quandlToken)
+Quandl.auth(quandlToken)
 
 CONTRACT_MONTHS <<- c('F', 'G', 'H', 'J', 'K', 'M', 'N', 'Q', 'U', 'V', 'X', 'Z')
 
